@@ -74,5 +74,9 @@ def lobster():
     total_spawners = [0]  # indexed by timestep
     total_recruits = [n_init_recruits]  # indexed by timestep
 
+    for timestep in range(1, n_timesteps + 1):
+        pass
+
+
 
 
