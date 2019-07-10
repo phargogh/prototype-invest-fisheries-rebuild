@@ -120,14 +120,13 @@ def lobster():
 
     # For keeping track of spawners and recruits
     # Indexed by timestep.
-    total_spawners = []
-    total_recruits = []
+    total_spawners = [0]
+    total_recruits = [n_init_recruits]
 
     # populations[subregion][timestep][stage_index]
     populations = collections.defaultdict(lambda: collections.defaultdict(list))
     for timestep in range(0, n_timesteps + 1):
-        total_recruits = 0
-        total_population = 0
+        spawners = 0
 
         # Set initial conditions (different from normal modelling)
         if timestep == 0:
@@ -144,16 +143,26 @@ def lobster():
                             (1 - survival[subregion][stage_index]))
 
                     populations[subregion][timestep].append(population)
+                    spawners += stage['Maturity'] * stage['Weight'] * population
         else:
             for subregion, subregion_params in per_subregion_params.items():
                 larval_dispersal = subregion_params['LarvalDispersal']
-                migration = 1  # No migration for now.
 
-                for stage_index, stage in enumerate(subregion_params['stages'].values()):
+                for stage_index, (stage_name, stage) in enumerate(subregion_params['stages'].items()):
                     if stage_index == 0:
-                        population = beverton_holt(alpha, beta, spawners=n_init_recruits/n_sexes)
+                        population = total_recruits[timestep] / n_sexes
                     elif stage_index < (n_stages - 1):
-                        population = populations[subregion][timestep-1][stage_index-1] * survival[subregion][stage_index-1]
+                        # If there is defined migration for this stage, add that calculation in here.
+                        if stage_name in migration:
+                            population = 0
+                            for other_subregion in per_subregion_params.keys():
+                                prev_stage_population = populations[other_subregion][timestep-1][stage_index-1]
+                                migration_proportion = migration[stage_name][other_subregion][subregion]
+                                population += (prev_stage_population * migration_proportion)
+                            population *= survival[subregion][stage_index-1]
+                        else:
+                            population = populations[subregion][timestep-1][stage_index-1] * survival[subregion][stage_index-1]
+
                     else:  # We're at max stage
                         population = (
                             (populations[subregion][timestep-1][stage_index-1] * survival[subregion][stage_index-1]) +
@@ -164,11 +173,10 @@ def lobster():
                     population = max(0, population)
 
                     populations[subregion][timestep].append(population)
+                    spawners += stage['Maturity'] * stage['Weight'] * population
 
-    # produce 1 table per subregion
-
-
-
+        total_spawners.append(spawners)
+        total_recruits.append(max(0, beverton_holt(alpha, beta, total_spawners[timestep])))
 
     # For now, just produce a dataframe for a single subregion for all timesteps.
     out_df = pandas.DataFrame.from_dict(populations['1'], orient='index')
