@@ -1,3 +1,5 @@
+import pprint
+
 import numpy
 import pandas
 from natcap.invest import datastack
@@ -15,43 +17,48 @@ def lobster():
         '../../invest/data/invest-sample-data/spiny_lobster_belize.invs.json')
     args = paramset.args.copy()
 
+    pprint.pprint(args)
+
     alpha = numpy.float64(args['alpha'])
     beta = numpy.float64(args['beta'])
-    n_sexes = numpy.int64(args['sexsp'])
+    if args['sexsp'].lower() == 'yes':
+        n_sexes = 2
+    else:
+        n_sexes = 1
     n_init_recruits = numpy.int64(args['total_init_recruits'])
     n_timesteps = numpy.int64(args['total_timesteps'])
     unit_price = numpy.float64(args['unit_price'])
 
     # parsed population parameters
-    population_params = pandas.read_csv(param_csv_path)
+    population_params = pandas.read_csv(args['population_csv_path'])
     per_subregion_params = {}
     per_stage_params = {}
     for subregion in population_params.columns:
         if subregion.lower() == 'age_area':
             continue
 
-        per_subregion_params[subregion] = {}
-
-        if subregion.startwith('Unnamed:'):
+        if subregion.startswith('Unnamed:'):
             break
 
-        for row in population_params.iterrows():
-            if row.isna():
+        per_subregion_params[subregion] = {'stages': {}}
+
+        for row_index, row in population_params.iterrows():
+            if all(row.isna()):
                 break
 
-            stage_name = row[Age_Area]
+            stage_name = row['Age_Area']
 
             stage_parameters = {}
             stage_parameters['Mortality'] = row[subregion]
-            stage_parameters['Maturity'] = row.
-            stage_parameters['ExploitationFraction'] = row.ExploitationFraction
-            stage_parameters['LarvalDispersal'] = row.LarvalDispersal
+            stage_parameters['Maturity'] = row.Maturity
+            stage_parameters['VulnFishing'] = row.VulnFishing
+            stage_parameters['Weight'] = row.Weight
 
-            per_subregion_params[subregion][stage_name] = stage_parameters
+            per_subregion_params[subregion]['stages'][stage_name] = stage_parameters
 
     parameter_start_index = float('inf')
     for row_index, row in population_params.iterrows():
-        if row.isna():
+        if all(row.isna()):
             parameter_start_index = row_index
         else:
             if row_index < parameter_start_index:
@@ -71,6 +78,8 @@ def lobster():
 
             per_subregion_params[subregion_name][parameter_name] = row[subregion_name]
 
+    pprint.pprint(per_subregion_params)
+
     total_spawners = [0]  # indexed by timestep
     total_recruits = [n_init_recruits]  # indexed by timestep
 
@@ -78,5 +87,5 @@ def lobster():
         pass
 
 
-
-
+if __name__ == '__main__':
+    lobster()
