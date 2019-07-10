@@ -9,7 +9,7 @@ from natcap.invest import datastack
 
 
 def beverton_holt(alpha, beta, spawners):
-    return (alpha*spawners) / (1 + (beta*spawners))
+    return float(alpha*spawners) / (1. + (beta*spawners))
 
 
 def lobster():
@@ -84,8 +84,6 @@ def lobster():
 
             per_subregion_params[subregion_name][parameter_name] = row[subregion_name]
 
-    pprint.pprint(per_subregion_params)
-
     total_spawners = [0]  # indexed by timestep
     total_recruits = [n_init_recruits]  # indexed by timestep
     n_stages = len(per_subregion_params.values()[0]['stages'])
@@ -150,7 +148,7 @@ def lobster():
 
                 for stage_index, (stage_name, stage) in enumerate(subregion_params['stages'].items()):
                     if stage_index == 0:
-                        population = total_recruits[timestep] / n_sexes
+                        population = (total_recruits[timestep] / float(n_sexes)) * larval_dispersal
                     elif stage_index < (n_stages - 1):
                         # If there is defined migration for this stage, add that calculation in here.
                         if stage_name in migration:
@@ -176,7 +174,7 @@ def lobster():
                     spawners += stage['Maturity'] * stage['Weight'] * population
 
         total_spawners.append(spawners)
-        total_recruits.append(max(0, beverton_holt(alpha, beta, total_spawners[timestep])))
+        total_recruits.append(max(0, beverton_holt(alpha, beta, spawners)))
 
     # For now, just produce a dataframe for a single subregion for all timesteps.
     out_df = pandas.DataFrame.from_dict(populations['1'], orient='index')
