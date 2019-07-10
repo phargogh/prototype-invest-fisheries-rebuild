@@ -130,6 +130,7 @@ def lobster():
         if timestep == 0:
             for subregion, subregion_params in per_subregion_params.items():
                 larval_dispersal = subregion_params['LarvalDispersal']
+
                 for stage_index, stage in enumerate(subregion_params['stages'].values()):
                     if stage_index == 0:
                         population = (n_init_recruits/float(n_sexes)) * larval_dispersal
