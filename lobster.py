@@ -1,3 +1,5 @@
+import os
+import glob
 import collections
 import pprint
 
@@ -97,6 +99,30 @@ def lobster():
             survival[subregion].append(
                 stage['Mortality']*(1-(exploitation * stage['VulnFishing'])))
 
+    # migration[stage][from_subregion][to_subregion] = float
+    migration = {}
+    for csv_filename in glob.glob(os.path.join(args['migration_dir'], '*.csv')):
+        stage = os.path.splitext(os.path.basename(csv_filename))[0].split('_')[-1]
+        temp_dict = pandas.DataFrame.to_dict(
+            pandas.read_csv(csv_filename, index_col=0), orient='dict')
+
+        # Pandas' to_dict() reads in the sink subregions as integers if they
+        # are integers, so we need to make sure that they are all strings so we
+        # can index the dict properly.
+        cast_keys_dict = {}
+        for source_subregion, sink_dict in temp_dict.items():
+            nested_dict = {}
+            for sink_subregion, migration_proportion in sink_dict.items():
+                nested_dict[str(sink_subregion)] = migration_proportion
+
+            cast_keys_dict[source_subregion] = nested_dict
+        migration[stage] = cast_keys_dict
+
+    # For keeping track of spawners and recruits
+    # Indexed by timestep.
+    total_spawners = []
+    total_recruits = []
+
     # populations[subregion][timestep][stage_index]
     populations = collections.defaultdict(lambda: collections.defaultdict(list))
     for timestep in range(0, n_timesteps + 1):
@@ -144,12 +170,9 @@ def lobster():
 
 
 
-
-
-
-
-
-
+    # For now, just produce a dataframe for a single subregion for all timesteps.
+    out_df = pandas.DataFrame.from_dict(populations['1'], orient='index')
+    print(out_df)
 
 
 if __name__ == '__main__':
