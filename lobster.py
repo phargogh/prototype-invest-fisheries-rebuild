@@ -29,6 +29,7 @@ def lobster():
     pprint.pprint(args)
 
     # lobster is age-based.
+    model_type = 'age'
     #alpha = numpy.float64(args['alpha'])
     #beta = numpy.float64(args['beta'])
     # n_init_recruits = numpy.int64(args['total_init_recruits'])
@@ -47,6 +48,8 @@ def lobster():
     #alpha = numpy.float64(5770000)
     #beta = numpy.float64(2885000)
     #recruitment = beverton_holt_2
+
+    model_type = 'stage'  # because I want to try this out.
 
     if args['sexsp'].lower() == 'yes':
         n_sexes = 2.0
@@ -157,51 +160,94 @@ def lobster():
             for stage_index, (stage_name, stage) in enumerate(subregion_params['stages'].items()):
                 assert stage_index == int(stage_name)  # should be true for test data.
 
-                if stage_index == 0:
-                    population = total_recruits[timestep] * larval_dispersal_per_sex
 
-                elif stage_index < (n_stages -1):
-                    # disallow migration in the initial timestep.
-                    if stage_name in migration and timestep > 0:
-                        population = population_after_migration(subregion, timestep-1, stage_index-1)
+                if model_type == 'age':
+                    if stage_index == 0:
+                        population = total_recruits[timestep] * larval_dispersal_per_sex
+
+                    elif stage_index < (n_stages -1):
+                        # disallow migration in the initial timestep.
+                        if stage_name in migration and timestep > 0:
+                            population = population_after_migration(subregion, timestep-1, stage_index-1)
+
+                        else:
+                            # Don't allow the population index to go below 0.
+                            # If we're setting the initial condition, this will be:
+                            #    populations[subregion][0][stage_index-1]
+                            #
+                            # Otherwise, this will be
+                            #    populations[subregion][timestep-1][stage_index-1]
+                            population = populations[subregion][max(0, timestep-1)][stage_index-1]
+                        population *= survival[subregion][stage_index-1]
 
                     else:
-                        # Don't allow the population index to go below 0.
-                        # If we're setting the initial condition, this will be:
-                        #    populations[subregion][0][stage_index-1]
-                        #
-                        # Otherwise, this will be
-                        #    populations[subregion][timestep-1][stage_index-1]
-                        population = populations[subregion][max(0, timestep-1)][stage_index-1]
-                    population *= survival[subregion][stage_index-1]
+                        survival_from_previous_stage = survival[subregion][stage_index-1]
+                        survival_from_final_stage = survival[subregion][stage_index]
 
-                else:
-                    survival_from_previous_stage = survival[subregion][stage_index-1]
-                    survival_from_final_stage = survival[subregion][stage_index]
+                        # Initial conditions are a bit special for the final stage of a subregion.
+                        # Migration is disallowed for this timestep.
+                        if timestep == 0:
+                            population = (
+                                (populations[subregion][0][stage_index-1] * survival_from_previous_stage) /
+                                (1 - survival_from_final_stage))
 
-                    # Initial conditions are a bit special for the final stage of a subregion.
-                    # Migration is disallowed for this timestep.
+                        # Migration can only happen if it's allowed for this stage
+                        # and we're not at timestep 0.
+                        if stage_name in migration and timestep > 0:
+                            prev_stage_population = population_after_migration(
+                                subregion, timestep-1, stage_index-1) * survival_from_previous_stage
+
+                            final_stage_population = population_after_migration(
+                                subregion, timestep-1, stage_index)* survival_from_final_stage
+
+                            population = prev_stage_population + final_stage_population
+
+                        # No migration, we're not at timestep 0 and we're at the final stage.
+                        else:
+                            population = (
+                                (populations[subregion][timestep-1][stage_index-1] * survival_from_previous_stage) +
+                                (populations[subregion][timestep-1][stage_index] * survival_from_final_stage))
+
+                # Stage-base populations have a completely different model structure.
+                elif model_type == 'stage':
                     if timestep == 0:
-                        population = (
-                            (populations[subregion][0][stage_index-1] * survival_from_previous_stage) /
-                            (1 - survival_from_final_stage))
-
-                    # Migration can only happen if it's allowed for this stage
-                    # and we're not at timestep 0.
-                    if stage_name in migration and timestep > 0:
-                        prev_stage_population = population_after_migration(
-                            subregion, timestep-1, stage_index-1) * survival_from_previous_stage
-
-                        final_stage_population = population_after_migration(
-                            subregion, timestep-1, stage_index)* survival_from_final_stage
-
-                        population = prev_stage_population + final_stage_population
-
-                    # No migration, we're not at timestep 0 and we're at the final stage.
+                        if stage_index == 0:
+                            population = total_recruits[timestep] * larval_dispersal_per_sex
+                        else:
+                            population = 1
                     else:
-                        population = (
-                            (populations[subregion][timestep-1][stage_index-1] * survival_from_previous_stage) +
-                            (populations[subregion][timestep-1][stage_index] * survival_from_final_stage))
+                        # P_asx in the User's Guide.  The probability of
+                        # surviving from natural and fishing mortality and
+                        # *staying* in the same stage for this sex and subregion.
+                        stage_survival = survival[subregion][stage_index]
+                        probability_of_staying_in_same_stage = (
+                            stage_survival * (
+                                (1-stage_survival**(stage['Duration']-1)) /
+                                (1-stage_survival**(stage['Duration']))))
+
+                        if stage_index == 0:
+                            population = ((
+                                population_after_migration(
+                                    subregion, timestep-1, stage_index) *
+                                probability_of_staying_in_same_stage) + (
+                                    total_recruits[timestep]))
+                        else:
+                            # G_asx in the User's Guide.  The probability of
+                            # surviving from natural and fishing mortality and
+                            # *growing* into the next stage for each sex and
+                            # subregion.
+                            probability_of_growing_to_next_stage = (
+                                (stage_survival**stage['Duration'] * (1-stage_survival)) /
+                                (1-stage_survival**stage['Duration']))
+                            population = (
+                                (population_after_migration(
+                                    subregion, timestep-1, stage_index-1) *
+                                 probability_of_growing_to_next_stage) +
+                                (population_after_migration(
+                                    subregion, timestep-1, stage_index) *
+                                 probability_of_staying_in_same_stage))
+                else:
+                    raise AssertionError('Invalid model type')
 
                 # Can't have fewer than 0 individuals
                 population = max(0, population)
