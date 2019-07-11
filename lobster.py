@@ -151,6 +151,9 @@ def lobster():
                     if stage_index == 0:
                         population = (total_recruits[timestep] / float(n_sexes)) * larval_dispersal
                     elif stage_index < (n_stages - 1):
+                        if stage_index == 3 and timestep == 4:
+                            import pdb; pdb.set_trace()
+
                         # If there is defined migration for this stage, add that calculation in here.
                         if stage_name in migration:
                             population = 0
