@@ -163,9 +163,25 @@ def lobster():
                             population = populations[subregion][timestep-1][stage_index-1] * survival[subregion][stage_index-1]
 
                     else:  # We're at max stage
-                        population = (
-                            (populations[subregion][timestep-1][stage_index-1] * survival[subregion][stage_index-1]) +
-                            (populations[subregion][timestep-1][stage_index] * survival[subregion][stage_index]))
+                        if stage_name in migration:
+                            prev_stage_population = 0
+                            for other_subregion in per_subregion_params.keys():
+                                prev_stage_population = populations[other_subregion][timestep-1][stage_index-1]
+                                migration_proportion = migration[stage_name][other_subregion][subregion]
+                                prev_stage_population += (prev_stage_population * migration_proportion)
+                            prev_stage_population *= survival[subregion][stage_index-1]
+
+                            final_stage_population = 0
+                            for other_subregion in per_subregion_params.keys():
+                                final_stage_population += (
+                                    populations[other_subregion][timestep-1][stage_index] *
+                                    migration[stage_name][other_subregion][subregion])
+
+                            population = prev_stage_population + final_stage_population
+                        else:
+                            population = (
+                                (populations[subregion][timestep-1][stage_index-1] * survival[subregion][stage_index-1]) +
+                                (populations[subregion][timestep-1][stage_index] * survival[subregion][stage_index]))
 
                     # Can't have fewer than 0 individuals
                     # Can't have fractional individuals.
