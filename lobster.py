@@ -176,6 +176,7 @@ def lobster():
                                 final_stage_population += (
                                     populations[other_subregion][timestep-1][stage_index] *
                                     migration[stage_name][other_subregion][subregion])
+                            final_stage_population *= survival[subregion][stage_index]
 
                             population = prev_stage_population + final_stage_population
                         else:
