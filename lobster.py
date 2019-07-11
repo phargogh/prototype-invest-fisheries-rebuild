@@ -1,3 +1,4 @@
+import math
 import os
 import glob
 import collections
@@ -13,6 +14,11 @@ def beverton_holt_1(alpha, beta, spawners):
 
 def beverton_holt_2(alpha, beta, spawners):
     return float(alpha * spawners) / (beta + spawners)
+
+def ricker(alpha, beta, spawners):
+    return (alpha*spawners*math.e**(-beta*spawners))
+
+
 
 
 def lobster():
