@@ -12,13 +12,13 @@ from natcap.invest import datastack
 def beverton_holt_1(alpha, beta, spawners):
     return float(alpha*spawners) / (1. + (beta*spawners))
 
+
 def beverton_holt_2(alpha, beta, spawners):
     return float(alpha * spawners) / (beta + spawners)
 
+
 def ricker(alpha, beta, spawners):
     return (alpha*spawners*math.e**(-beta*spawners))
-
-
 
 
 def lobster():
