@@ -146,18 +146,19 @@ def lobster():
              migration[stage_name][other_subregion][this_subregion])
             for other_subregion in subregions)
 
-
     # populations[subregion][timestep][stage_index]
     populations = collections.defaultdict(lambda: collections.defaultdict(list))
     for timestep in range(0, n_timesteps + 1):
         spawners = 0
 
-        # Set initial conditions (different from normal modelling)
-        if timestep == 0:
-            for subregion, subregion_params in per_subregion_params.items():
-                larval_dispersal_per_sex = subregion_params['LarvalDispersal'] / n_sexes
+        for subregion, subregion_params in per_subregion_params.items():
+            larval_dispersal_per_sex = subregion_params['LarvalDispersal'] / n_sexes
 
-                for stage_index, stage in enumerate(subregion_params['stages'].values()):
+            for stage_index, (stage_name, stage) in enumerate(subregion_params['stages'].items()):
+                assert stage_index == int(stage_name)  # should be true for test data.
+
+                # Initial conditions are a bit different from the other timesteps.
+                if timestep == 0:
                     if stage_index == 0:
                         population = n_init_recruits * larval_dispersal_per_sex
                     elif stage_index < (n_stages -1):
@@ -166,24 +167,14 @@ def lobster():
                         population = (
                             (populations[subregion][0][stage_index-1] * survival[subregion][stage_index-1]) /
                             (1 - survival[subregion][stage_index]))
-
-                    populations[subregion][timestep].append(population)
-                    spawners += stage['Maturity'] * stage['Weight'] * population
-        else:
-            for subregion, subregion_params in per_subregion_params.items():
-                larval_dispersal_per_sex = subregion_params['LarvalDispersal'] / n_sexes
-
-                for stage_index, (stage_name, stage) in enumerate(subregion_params['stages'].items()):
-                    assert stage_index == int(stage_name)  # should be true for test data.
-
+                else:
                     if stage_index == 0:
                         population = total_recruits[timestep] * larval_dispersal_per_sex
                     elif stage_index < (n_stages - 1):
 
                         # If there is defined migration for this stage, add that calculation in here.
                         if stage_name in migration:
-                            population = population_after_migration(
-                                subregion, timestep-1, stage_index-1)
+                            population = population_after_migration(subregion, timestep-1, stage_index-1)
                         else:
                             population = populations[subregion][timestep-1][stage_index-1]
                         population *= survival[subregion][stage_index-1]
@@ -202,12 +193,12 @@ def lobster():
                                 (populations[subregion][timestep-1][stage_index-1] * survival[subregion][stage_index-1]) +
                                 (populations[subregion][timestep-1][stage_index] * survival[subregion][stage_index]))
 
-                    # Can't have fewer than 0 individuals
-                    # Can't have fractional individuals.
-                    population = max(0, population)
+                # Can't have fewer than 0 individuals
+                # Can't have fractional individuals.
+                population = max(0, population)
 
-                    populations[subregion][timestep].append(population)
-                    spawners += stage['Maturity'] * stage['Weight'] * population
+                populations[subregion][timestep].append(population)
+                spawners += stage['Maturity'] * stage['Weight'] * population
 
         total_spawners.append(spawners)
         total_recruits.append(max(0, recruitment(alpha, beta, spawners)))
