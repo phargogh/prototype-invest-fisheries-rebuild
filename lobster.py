@@ -43,10 +43,10 @@ def lobster():
     recruitment = beverton_holt_1
 
     # These are the values in the Model_Lobster sheet
-    n_init_recruits = 4686959
-    alpha = numpy.float64(5770000)
-    beta = numpy.float64(2885000)
-    recruitment = beverton_holt_2
+    #n_init_recruits = 4686959
+    #alpha = numpy.float64(5770000)
+    #beta = numpy.float64(2885000)
+    #recruitment = beverton_holt_2
 
     if args['sexsp'].lower() == 'yes':
         n_sexes = 2.0
@@ -105,6 +105,7 @@ def lobster():
     total_spawners = [0]  # indexed by timestep
     total_recruits = [n_init_recruits]  # indexed by timestep
     n_stages = len(per_subregion_params.values()[0]['stages'])
+    subregions = list(per_subregion_params.keys())
 
     # survival[subregion][stage_index]
     survival = collections.defaultdict(list)
@@ -138,6 +139,13 @@ def lobster():
     # Indexed by timestep.
     total_spawners = [0]
     total_recruits = [n_init_recruits]
+
+    def population_after_migration(this_subregion, timestep, stage_index):
+        return sum(
+            (populations[other_subregion][timestep][stage_index] *
+             migration[stage_name][other_subregion][this_subregion])
+            for other_subregion in subregions)
+
 
     # populations[subregion][timestep][stage_index]
     populations = collections.defaultdict(lambda: collections.defaultdict(list))
@@ -174,30 +182,18 @@ def lobster():
 
                         # If there is defined migration for this stage, add that calculation in here.
                         if stage_name in migration:
-                            population = 0
-                            for other_subregion in per_subregion_params.keys():
-                                prev_stage_population = populations[other_subregion][timestep-1][stage_index-1]
-                                migration_proportion = migration[stage_name][other_subregion][subregion]
-                                population += (prev_stage_population * migration_proportion)
-                            population *= survival[subregion][stage_index-1]
+                            population = population_after_migration(
+                                subregion, timestep-1, stage_index-1) * survival[subregion][stage_index-1]
                         else:
                             population = populations[subregion][timestep-1][stage_index-1] * survival[subregion][stage_index-1]
 
                     else:  # We're at max stage
                         if stage_name in migration:
-                            prev_stage_population = 0
-                            for other_subregion in per_subregion_params.keys():
-                                prev_stage_population = populations[other_subregion][timestep-1][stage_index-1]
-                                migration_proportion = migration[stage_name][other_subregion][subregion]
-                                prev_stage_population += (prev_stage_population * migration_proportion)
-                            prev_stage_population *= survival[subregion][stage_index-1]
+                            prev_stage_population = population_after_migration(
+                                subregion, timestep-1, stage_index-1) * survival[subregion][stage_index-1]
 
-                            final_stage_population = 0
-                            for other_subregion in per_subregion_params.keys():
-                                final_stage_population += (
-                                    populations[other_subregion][timestep-1][stage_index] *
-                                    migration[stage_name][other_subregion][subregion])
-                            final_stage_population *= survival[subregion][stage_index]
+                            final_stage_population = population_after_migration(
+                                subregion, timestep-1, stage_index)* survival[subregion][stage_index]
 
                             population = prev_stage_population + final_stage_population
                         else:
