@@ -169,6 +169,7 @@ def lobster():
                         # Don't allow the population index to go below 0.
                         # If we're setting the initial condition, this will be:
                         #    populations[subregion][0][stage_index-1]
+                        #
                         # Otherwise, this will be
                         #    populations[subregion][timestep-1][stage_index-1]
                         population = populations[subregion][max(0, timestep-1)][stage_index-1]
@@ -177,6 +178,13 @@ def lobster():
                 else:
                     survival_from_previous_stage = survival[subregion][stage_index-1]
                     survival_from_final_stage = survival[subregion][stage_index]
+
+                    # Initial conditions are a bit special for the final stage of a subregion.
+                    # Migration is disallowed for this timestep.
+                    if timestep == 0:
+                        population = (
+                            (populations[subregion][0][stage_index-1] * survival_from_previous_stage) /
+                            (1 - survival_from_final_stage))
 
                     # Migration can only happen if it's allowed for this stage
                     # and we're not at timestep 0.
@@ -189,12 +197,6 @@ def lobster():
 
                         population = prev_stage_population + final_stage_population
 
-                    # Initial conditions are a bit special for the final stage of a subregion.
-                    elif timestep == 0:
-                        population = (
-                            (populations[subregion][0][stage_index-1] * survival_from_previous_stage) /
-                            (1 - survival_from_final_stage))
-
                     # No migration, we're not at timestep 0 and we're at the final stage.
                     else:
                         population = (
@@ -202,7 +204,6 @@ def lobster():
                             (populations[subregion][timestep-1][stage_index] * survival_from_final_stage))
 
                 # Can't have fewer than 0 individuals
-                # Can't have fractional individuals.
                 population = max(0, population)
 
                 populations[subregion][timestep].append(population)
