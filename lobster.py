@@ -183,9 +183,10 @@ def lobster():
                         # If there is defined migration for this stage, add that calculation in here.
                         if stage_name in migration:
                             population = population_after_migration(
-                                subregion, timestep-1, stage_index-1) * survival[subregion][stage_index-1]
+                                subregion, timestep-1, stage_index-1)
                         else:
-                            population = populations[subregion][timestep-1][stage_index-1] * survival[subregion][stage_index-1]
+                            population = populations[subregion][timestep-1][stage_index-1]
+                        population *= survival[subregion][stage_index-1]
 
                     else:  # We're at max stage
                         if stage_name in migration:
