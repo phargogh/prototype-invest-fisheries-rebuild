@@ -8,8 +8,11 @@ import pandas
 from natcap.invest import datastack
 
 
-def beverton_holt(alpha, beta, spawners):
+def beverton_holt_1(alpha, beta, spawners):
     return float(alpha*spawners) / (1. + (beta*spawners))
+
+def beverton_holt_2(alpha, beta, spawners):
+    return float(alpha * spawners) / (beta + spawners)
 
 
 def lobster():
@@ -26,9 +29,18 @@ def lobster():
     n_timesteps = numpy.int64(args['total_timesteps'])
     unit_price = numpy.float64(args['unit_price'])
 
+    # These are the parameters that Jess and Jodie want to use, but their
+    # migrations spreadsheet isn't referencing their modified sheet.
     n_init_recruits = 4686959
     alpha = numpy.float64(1000)
     beta = numpy.float64(0.00000016069)
+    recruitment = beverton_holt_1
+
+    # These are the values in the Model_Lobster sheet
+    n_init_recruits = 4686959
+    alpha = numpy.float64(5770000)
+    beta = numpy.float64(2885000)
+    recruitment = beverton_holt_2
 
     if args['sexsp'].lower() == 'yes':
         n_sexes = 2.0
@@ -37,8 +49,8 @@ def lobster():
 
     # parsed population parameters
     population_params = pandas.read_csv(args['population_csv_path'])
-    per_subregion_params = {}
-    per_stage_params = {}
+    per_subregion_params = collections.OrderedDict()
+    per_stage_params = collections.OrderedDict()
     for subregion in population_params.columns:
         if subregion.lower() == 'age_area':
             continue
@@ -97,10 +109,10 @@ def lobster():
             survival[subregion].append(
                 stage['Mortality']*(1-(exploitation * stage['VulnFishing'])))
 
-    # migration[stage][from_subregion][to_subregion] = float
+    # migration[stage_name][from_subregion][to_subregion] = float
     migration = {}
     for csv_filename in glob.glob(os.path.join(args['migration_dir'], '*.csv')):
-        stage = os.path.splitext(os.path.basename(csv_filename))[0].split('_')[-1]
+        stage_name = os.path.splitext(os.path.basename(csv_filename))[0].split('_')[-1]
         temp_dict = pandas.DataFrame.to_dict(
             pandas.read_csv(csv_filename, index_col=0), orient='dict')
 
@@ -114,7 +126,7 @@ def lobster():
                 nested_dict[str(sink_subregion)] = migration_proportion
 
             cast_keys_dict[source_subregion] = nested_dict
-        migration[stage] = cast_keys_dict
+        migration[stage_name] = cast_keys_dict
 
     # For keeping track of spawners and recruits
     # Indexed by timestep.
@@ -148,11 +160,11 @@ def lobster():
                 larval_dispersal = subregion_params['LarvalDispersal']
 
                 for stage_index, (stage_name, stage) in enumerate(subregion_params['stages'].items()):
+                    assert stage_index == int(stage_name)  # should be true for test data.
+
                     if stage_index == 0:
                         population = (total_recruits[timestep] / float(n_sexes)) * larval_dispersal
                     elif stage_index < (n_stages - 1):
-                        if stage_index == 3 and timestep == 4:
-                            import pdb; pdb.set_trace()
 
                         # If there is defined migration for this stage, add that calculation in here.
                         if stage_name in migration:
@@ -195,7 +207,7 @@ def lobster():
                     spawners += stage['Maturity'] * stage['Weight'] * population
 
         total_spawners.append(spawners)
-        total_recruits.append(max(0, beverton_holt(alpha, beta, spawners)))
+        total_recruits.append(max(0, recruitment(alpha, beta, spawners)))
 
     # For now, just produce a dataframe for a single subregion for all timesteps.
     out_df = pandas.DataFrame.from_dict(populations['1'], orient='index')
