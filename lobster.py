@@ -36,8 +36,15 @@ def ricker(args):
 def fixed(args):
     return args['n_recruits']
 
-
 def lobster():
+    paramset = datastack.extract_parameter_set(
+        '../../invest/data/invest-sample-data/spiny_lobster_belize.invs.json')
+    args = paramset.args.copy()
+
+    LOGGER.info('Spiny Lobster - Sample Data')
+    model(args, recruitment=beverton_holt_2)
+
+def lobster_jess():
     paramset = datastack.extract_parameter_set(
         '../../invest/data/invest-sample-data/spiny_lobster_belize.invs.json')
     args = paramset.args.copy()
@@ -66,7 +73,7 @@ def lobster():
     #beta = numpy.float64(2885000)
     #recruitment = beverton_holt_2
 
-    LOGGER.info('Spiny Lobster')
+    LOGGER.info('Spiny Lobster - Jess')
     model(args, recruitment=recruitment)
 
 def shrimp():
@@ -407,17 +414,27 @@ def model(args, recruitment):
     # This harvest value dataframe is from the final harvest numbers.
     if args['val_cont']:
         harvest_value = []
+        total_harvest = 0
         for subregion in subregions:
             harvest_value.append({
                 'subregion': subregion,
                 'harvest': harvest[subregion][-1],
-                'value': harvest[subregion][-1] * args['unit_price'],
+                'value': harvest[subregion][-1] * args['unit_price'] * args['frac_post_process'],
             })
-        harvest_value_df = pandas.DataFrame.from_dict(harvest_value)
+            total_harvest += harvest[subregion][-1]
 
+        harvest_value.append({
+            'subregion': 'TOTAL',
+            'harvest': total_harvest,
+            'value': total_harvest * args['unit_price'] * args['frac_post_process'],
+        })
+
+        harvest_value_df = pandas.DataFrame.from_dict(harvest_value)
         # Rearrange the columns
         harvest_value_df = harvest_value_df[['subregion', 'harvest', 'value']]
-        LOGGER.info('HARVEST VALUE')
+
+        LOGGER.info('HARVEST VALUE price=%s, frac_post_process=%s',
+            args['unit_price'], args['frac_post_process'])
         print(harvest_value_df)
     else:
         LOGGER.info('Valuation disabled')
@@ -425,6 +442,7 @@ def model(args, recruitment):
 
 
 if __name__ == '__main__':
+    #lobster_jess()
     lobster()
-    shrimp()
-    crab()
+    #shrimp()
+    #crab()
