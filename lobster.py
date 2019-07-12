@@ -81,6 +81,20 @@ def shrimp():
     model(args, recruitment=fixed)
 
 
+def crab():
+    # Ricker recruitment
+    # spawners are individuals
+    # age-based population model
+    # no migration
+    # Sex-specific population
+    LOGGER.info('Crab')
+    paramset = datastack.extract_parameter_set(
+        '../../invest/data/invest-sample-data/dungeness_crab_hood_canal.invs.json')
+    args = paramset.args.copy()
+
+    model(args, recruitment=ricker)
+
+
 def model(args, recruitment):
     n_timesteps = numpy.int64(args['total_timesteps'])
     n_init_recruits = numpy.int64(args['total_init_recruits'])
@@ -414,3 +428,4 @@ def model(args, recruitment):
 if __name__ == '__main__':
     lobster()
     shrimp()
+    crab()
