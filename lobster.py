@@ -56,6 +56,9 @@ def lobster():
     alpha = numpy.float64(1000)
     beta = numpy.float64(0.00000016069)
     recruitment = beverton_holt_1
+    args['alpha'] = alpha
+    args['beta'] = beta
+    args['total_init_recruits'] = n_init_recruits
 
     # These are the values in the Model_Lobster sheet
     #n_init_recruits = 4686959
