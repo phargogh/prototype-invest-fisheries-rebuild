@@ -40,6 +40,7 @@ def lobster():
     paramset = datastack.extract_parameter_set(
         '../../invest/data/invest-sample-data/spiny_lobster_belize.invs.json')
     args = paramset.args.copy()
+    args['total_init_recruits'] = 4686959  # to match spreadsheet
 
     LOGGER.info('Spiny Lobster - Sample Data')
     model(args, recruitment=beverton_holt_2)
@@ -393,18 +394,23 @@ def model(args, recruitment):
     # harvest[subregion][timestep]
     harvest = {}
     for subregion in subregions:
-        # exploitation is the 'harvest' column in the spreadsheet,
+        # exploitation is the 'harvest' row in the spreadsheet,
         # 'ExploitationFraction' in the population parameters table.
         exploitation = per_subregion_params[subregion]['ExploitationFraction']
         harvest[subregion] = []
         for timestep in range(0, n_timesteps+1):
             harvest_population = 0
             for stage_index, stage_name in enumerate(stages):
+                # vulnerability is the 'vulnerability' row in the spreadsheet,
+                # represented in populations input as VulnFishing
                 vulnerability = per_subregion_params[subregion]['stages'][stage_name]['VulnFishing']
+                weight = per_subregion_params[subregion]['stages'][stage_name]['Weight']
 
                 harvest_population += (
                     populations[subregion][timestep][stage_index] *
-                    exploitation * vulnerability)
+                    exploitation *
+                    vulnerability *
+                    weight)
 
             harvest[subregion].append(harvest_population)
     harvest_df = pandas.DataFrame.from_dict(harvest, orient='columns')
