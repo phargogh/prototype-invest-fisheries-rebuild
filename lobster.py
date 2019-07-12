@@ -445,6 +445,23 @@ def model(args, recruitment):
     else:
         LOGGER.info('Valuation disabled')
 
+    # Totals-per-timestep
+    # produce a dataframe of (timestep, spawners, recruits, harvest, value, equilibrium)
+    # If no valuation, leave out the valuation column.
+    df_spawners_recruits = pandas.DataFrame.from_dict({
+        'Timestep': list(range(0, n_timesteps + 1)),
+        'Total spawners': total_spawners[:-1],
+        'Total recruits': total_recruits[:-1]})
+    df_spawners_recruits = df_spawners_recruits[['Timestep', 'Total spawners', 'Total recruits']]
+    total_harvest_series = harvest_df.sum(axis=1)
+    total_harvest_series.rename('Total harvest')
+    total_harvest_df = pandas.DataFrame({'Total harvest': total_harvest_series})
+    df_spawners_recruits = df_spawners_recruits.join(total_harvest_df)
+    # TODO: add in Total Value column
+    # TODO: add in equilibrium checking column.
+    print(df_spawners_recruits)
+
+
 
 
 if __name__ == '__main__':
