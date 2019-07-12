@@ -172,7 +172,7 @@ def model(args, recruitment):
 
             per_subregion_params[subregion_name][parameter_name] = row[subregion_name]
 
-    n_stages = len(per_subregion_params.values()[0]['stages'])
+    stages = list(per_subregion_params.values()[0]['stages'].keys())
     subregions = list(per_subregion_params.keys())
 
     # survival[subregion][stage_index]
@@ -237,7 +237,7 @@ def model(args, recruitment):
                     if stage_index == 0:
                         population = total_recruits[timestep] * larval_dispersal_per_sex
 
-                    elif stage_index < (n_stages -1):
+                    elif stage_index < (len(stages) -1):
                         # disallow migration in the initial timestep.
                         if stage_name in migration and timestep > 0:
                             population = population_after_migration(subregion, stage_name, timestep-1, stage_index-1)
@@ -352,6 +352,7 @@ def model(args, recruitment):
 
     # For now, just produce a dataframe for a single subregion for all timesteps.
     out_df = pandas.DataFrame.from_dict(populations['1'], orient='index')
+    out_df.columns = stages  # reset stage names from indexes
     print(out_df)
 
 
