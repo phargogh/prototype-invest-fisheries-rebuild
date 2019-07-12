@@ -145,6 +145,9 @@ def model(args, recruitment):
             try:
                 stage_parameters['Weight'] = row.Weight
             except AttributeError:
+                if (args['harvest_units'].lower() == 'weight' or
+                        args['spawn_units'].lower() == 'weight'):
+                    raise ValueError('Weight vector required when harvest units are weight')
                 stage_parameters['Weight'] = 1
 
             try:
@@ -363,9 +366,53 @@ def model(args, recruitment):
         total_recruits.append(max(0, recruitment(recruitment_args)))
 
     # For now, just produce a dataframe for a single subregion for all timesteps.
+    # This dataframe is for populations from subregion 1 only.
     out_df = pandas.DataFrame.from_dict(populations['1'], orient='index')
     out_df.columns = stages  # reset stage names from indexes
+    print('POPULATION SUBREGION 1')
     print(out_df)
+
+    # This harvest dataframe is the harvest calculated for all subregions.
+    # This would be an intermediate output.
+    # harvest[subregion][timestep]
+    harvest = {}
+    for subregion in subregions:
+        # exploitation is the 'harvest' column in the spreadsheet,
+        # 'ExploitationFraction' in the population parameters table.
+        exploitation = per_subregion_params[subregion]['ExploitationFraction']
+        harvest[subregion] = []
+        for timestep in range(0, n_timesteps+1):
+            harvest_population = 0
+            for stage_index, stage_name in enumerate(stages):
+                vulnerability = per_subregion_params[subregion]['stages'][stage_name]['VulnFishing']
+
+                harvest_population += (
+                    populations[subregion][timestep][stage_index] *
+                    exploitation * vulnerability)
+
+            harvest[subregion].append(harvest_population)
+    harvest_df = pandas.DataFrame.from_dict(harvest, orient='columns')
+    print('HARVEST')
+    print(harvest_df)
+
+    # This harvest value dataframe is from the final harvest numbers.
+    if args['val_cont']:
+        harvest_value = []
+        for subregion in subregions:
+            harvest_value.append({
+                'subregion': subregion,
+                'harvest': harvest[subregion][-1],
+                'value': harvest[subregion][-1] * args['unit_price'],
+            })
+        harvest_value_df = pandas.DataFrame.from_dict(harvest_value)
+
+        # Rearrange the columns
+        harvest_value_df = harvest_value_df[['subregion', 'harvest', 'value']]
+        print('HARVEST VALUE')
+        print(harvest_value_df)
+    else:
+        LOGGER.info('Valuation disabled')
+
 
 
 if __name__ == '__main__':
