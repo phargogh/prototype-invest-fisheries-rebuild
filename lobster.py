@@ -33,8 +33,6 @@ def lobster():
     #alpha = numpy.float64(args['alpha'])
     #beta = numpy.float64(args['beta'])
     # n_init_recruits = numpy.int64(args['total_init_recruits'])
-    n_timesteps = numpy.int64(args['total_timesteps'])
-    unit_price = numpy.float64(args['unit_price'])
 
     # These are the parameters that Jess and Jodie want to use, but their
     # migrations spreadsheet isn't referencing their modified sheet.
@@ -49,12 +47,33 @@ def lobster():
     #beta = numpy.float64(2885000)
     #recruitment = beverton_holt_2
 
-    model_type = 'stage'  # because I want to try this out.
+
+    model(args)
+
+def shrimp():
+    # Uses fixed recruitment
+    # Stage-based model
+    # No migration
+    paramset = datastack.extract_parameter_set(
+        '../../invest/data/invest-sample-data/white_shrimp_galveston_bay.invs.json')
+    args = paramset.args.copy()
+
+    model(args)
+
+
+def model(args):
+    n_timesteps = numpy.int64(args['total_timesteps'])
+    n_init_recruits = numpy.int64(args['total_init_recruits'])
 
     if args['sexsp'].lower() == 'yes':
         n_sexes = 2.0
     else:
         n_sexes = 1.0
+
+    if args['population_type'].lower().startswith('stage'):
+        model_type = 'stage'
+    else:
+        model_type = 'age'
 
     # parsed population parameters
     population_params = pandas.read_csv(args['population_csv_path'])
@@ -73,13 +92,24 @@ def lobster():
             if all(row.isna()):
                 break
 
-            stage_name = row['Age_Area']
+            try:
+                # This the stage name header
+                stage_name = row['Age_Area']
+            except KeyError:
+                # shrimp uses this header instead.
+                stage_name = row['Stage']
 
             stage_parameters = {}
             stage_parameters['Mortality'] = row[subregion]
-            stage_parameters['Maturity'] = row.Maturity
+
+            if args['recruitment_type'].lower() in ('beverton-holt', 'ricker'):
+                stage_parameters['Maturity'] = row.Maturity
+            else:
+                stage_parameters['Maturity'] = 1
+
             stage_parameters['VulnFishing'] = row.VulnFishing
             stage_parameters['Weight'] = row.Weight
+            stage_parameters['Duration'] = row.Duration
 
             per_subregion_params[subregion]['stages'][stage_name] = stage_parameters
 
@@ -91,10 +121,15 @@ def lobster():
             if row_index < parameter_start_index:
                 continue
 
-        parameter_name = row['Age_Area']
+        try:
+            # This the parameter name header
+            parameter_name = row['Age_Area']
+        except KeyError:
+            # shrimp uses this header instead.
+            parameter_name = row['Stage']
 
         for subregion_name in population_params.columns:
-            if subregion_name.lower() == 'age_area':
+            if subregion_name.lower() in ('age_area', 'stage'):
                 continue
 
             if numpy.isnan(row[subregion_name]):
@@ -113,7 +148,10 @@ def lobster():
     # survival[subregion][stage_index]
     survival = collections.defaultdict(list)
     for subregion, subregion_params in per_subregion_params.items():
-        exploitation = subregion_params['ExploitationFraction']
+        try:
+            exploitation = subregion_params['ExploitationFraction']
+        except KeyError:
+            import pdb; pdb.set_trace()
 
         for stage_index, stage in enumerate(subregion_params['stages'].values()):
             survival[subregion].append(
@@ -264,4 +302,5 @@ def lobster():
 
 
 if __name__ == '__main__':
-    lobster()
+    #lobster()
+    shrimp()
