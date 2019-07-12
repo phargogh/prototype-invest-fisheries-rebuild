@@ -139,8 +139,17 @@ def model(args, recruitment):
                 stage_parameters['Maturity'] = 1
 
             stage_parameters['VulnFishing'] = row.VulnFishing
-            stage_parameters['Weight'] = row.Weight
-            stage_parameters['Duration'] = row.Duration
+            try:
+                stage_parameters['Weight'] = row.Weight
+            except AttributeError:
+                stage_parameters['Weight'] = 1
+
+            try:
+                stage_parameters['Duration'] = row.Duration
+            except AttributeError:
+                # Duration column required in stage-based models.
+                if model_type == 'stage':
+                    raise
 
             per_subregion_params[subregion]['stages'][stage_name] = stage_parameters
 
@@ -265,7 +274,7 @@ def model(args, recruitment):
 
                         # Migration can only happen if it's allowed for this stage
                         # and we're not at timestep 0.
-                        if stage_name in migration and timestep > 0:
+                        elif stage_name in migration and timestep > 0:
                             prev_stage_population = population_after_migration(
                                 subregion, stage_name, timestep-1, stage_index-1) * survival_from_previous_stage
 
@@ -357,5 +366,5 @@ def model(args, recruitment):
 
 
 if __name__ == '__main__':
-    #lobster()
+    lobster()
     shrimp()
