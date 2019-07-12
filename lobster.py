@@ -354,7 +354,12 @@ def model(args, recruitment):
                 population = max(0, population)
 
                 populations[subregion][timestep].append(population)
-                spawners += stage['Maturity'] * stage['Weight'] * population
+
+                # This is where we handle spawners by weight (if requested)
+                stage_spawners = population * stage['Maturity']
+                if args['spawn_units'].lower() == 'weight':
+                    stage_spawners*= stage['Weight']
+                spawners += stage_spawners
 
         total_spawners.append(spawners)
         recruitment_args = {
