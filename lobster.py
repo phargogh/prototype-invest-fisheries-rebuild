@@ -129,10 +129,9 @@ def model(args, recruitment):
     population_params = pandas.read_csv(args['population_csv_path'])
     per_subregion_params = collections.OrderedDict()
     per_stage_params = collections.OrderedDict()
-    for subregion in population_params.columns:
-        if subregion.lower() in ('age_area', 'stage'):
-            continue
 
+    # Subregions may only be in columns 1+
+    for subregion in population_params.columns[1:]:
         if subregion.startswith('Unnamed:'):
             break
 
