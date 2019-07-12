@@ -66,12 +66,14 @@ def lobster():
     #beta = numpy.float64(2885000)
     #recruitment = beverton_holt_2
 
+    LOGGER.info('Spiny Lobster')
     model(args, recruitment=recruitment)
 
 def shrimp():
     # Uses fixed recruitment
     # Stage-based model
     # No migration
+    LOGGER.info('White Shrimp')
     paramset = datastack.extract_parameter_set(
         '../../invest/data/invest-sample-data/white_shrimp_galveston_bay.invs.json')
     args = paramset.args.copy()
@@ -363,7 +365,7 @@ def model(args, recruitment):
     # This dataframe is for populations from subregion 1 only.
     out_df = pandas.DataFrame.from_dict(populations['1'], orient='index')
     out_df.columns = stages  # reset stage names from indexes
-    print('POPULATION SUBREGION 1')
+    LOGGER.info('POPULATION SUBREGION 1')
     print(out_df)
 
     # This harvest dataframe is the harvest calculated for all subregions.
@@ -386,7 +388,7 @@ def model(args, recruitment):
 
             harvest[subregion].append(harvest_population)
     harvest_df = pandas.DataFrame.from_dict(harvest, orient='columns')
-    print('HARVEST')
+    LOGGER.info('HARVEST')
     print(harvest_df)
 
     # This harvest value dataframe is from the final harvest numbers.
@@ -402,7 +404,7 @@ def model(args, recruitment):
 
         # Rearrange the columns
         harvest_value_df = harvest_value_df[['subregion', 'harvest', 'value']]
-        print('HARVEST VALUE')
+        LOGGER.info('HARVEST VALUE')
         print(harvest_value_df)
     else:
         LOGGER.info('Valuation disabled')
