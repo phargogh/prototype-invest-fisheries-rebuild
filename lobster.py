@@ -126,12 +126,8 @@ def model(args, recruitment):
             if all(row.isna()):
                 break
 
-            try:
-                # This the stage name header
-                stage_name = row['Age_Area']
-            except KeyError:
-                # shrimp uses this header instead.
-                stage_name = row['Stage']
+            # The stage name is always in the first column
+            stage_name = row[0]
 
             stage_parameters = {}
             stage_parameters['Mortality'] = row[subregion]
@@ -168,17 +164,10 @@ def model(args, recruitment):
             if row_index < parameter_start_index:
                 continue
 
-        try:
-            # This the parameter name header for lobster
-            parameter_name = row['Age_Area']
-        except KeyError:
-            # shrimp uses this header instead.
-            parameter_name = row['Stage']
+        # Parameter name is always in the first column
+        parameter_name = row[0]
 
-        for subregion_name in population_params.columns:
-            if subregion_name.lower() in ('age_area', 'stage'):
-                continue
-
+        for subregion_name in population_params.columns[1:]:
             if numpy.isnan(row[subregion_name]):
                 continue
 
