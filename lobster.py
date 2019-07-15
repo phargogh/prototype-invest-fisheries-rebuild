@@ -137,20 +137,35 @@ def model(args, recruitment):
     population_params = pandas.read_csv(args['population_csv_path'])
     per_subregion_params = collections.OrderedDict()
     per_stage_params = collections.OrderedDict()
+    sexes = list(range(0, int(n_sexes)))
+    assert(len(sexes) == n_sexes)
 
     # Subregions may only be in columns 1+
     for subregion in population_params.columns[1:]:
         if subregion.startswith('Unnamed:'):
             break
 
-        per_subregion_params[subregion] = {'stages': collections.OrderedDict()}
+        per_subregion_params[subregion] = {'stages': [collections.OrderedDict() for sex in sexes]}
 
+        encountered_stage_names = set()
         for row_index, row in population_params.iterrows():
             if all(row.isna()):
                 break
 
             # The stage name is always in the first column
             stage_name = row[0]
+            if stage_name not in encountered_stage_names:
+                _sex_index = 0
+            else:
+                if n_sexes == 1:
+                    raise ValueError(
+                        'Two stages have the same name but this '
+                        'model is not sex-specific')
+
+                # We're in a new sex of an existing stage.
+                _sex_index = 1
+            encountered_stage_names.add(stage_name)
+
 
             stage_parameters = {}
             stage_parameters['Mortality'] = row[subregion]
@@ -176,7 +191,7 @@ def model(args, recruitment):
                 if model_type == 'stage':
                     raise
 
-            per_subregion_params[subregion]['stages'][stage_name] = stage_parameters
+            per_subregion_params[subregion]['stages'][_sex_index][stage_name] = stage_parameters
 
     parameter_start_index = float('inf')
     for row_index, row in population_params.iterrows():
@@ -194,22 +209,20 @@ def model(args, recruitment):
             if numpy.isnan(row[subregion_name]):
                 continue
 
-            if subregion_name not in per_subregion_params:
-                per_subregion_params[subregion_name] = {}
-
             per_subregion_params[subregion_name][parameter_name] = row[subregion_name]
 
-    stages = list(per_subregion_params.values()[0]['stages'].keys())
+    stages = list(per_subregion_params.values()[0]['stages'][0].keys())
     subregions = list(per_subregion_params.keys())
 
-    # survival[subregion][stage_index]
-    survival = collections.defaultdict(list)
+    # survival[sex_index][subregion][stage_index]
+    survival = [collections.defaultdict(list) for sex in sexes]
     for subregion, subregion_params in per_subregion_params.items():
         exploitation = subregion_params['ExploitationFraction']
 
-        for stage_index, stage in enumerate(subregion_params['stages'].values()):
-            survival[subregion].append(
-                stage['Mortality']*(1-(exploitation * stage['VulnFishing'])))
+        for sex_index in sexes:
+            for stage_index, stage in enumerate(subregion_params['stages'][sex_index].values()):
+                survival[sex_index][subregion].append(
+                    stage['Mortality']*(1-(exploitation * stage['VulnFishing'])))
 
     # migration[stage_name][from_subregion][to_subregion] = float
     migration = {}
@@ -238,140 +251,141 @@ def model(args, recruitment):
     total_spawners = [0]
     total_recruits = [n_init_recruits]
 
-    def population_after_migration(this_subregion, this_stage_name, timestep, stage_index):
+    def population_after_migration(this_subregion, this_stage_name, timestep, stage_index, sex_index):
         return sum(
-            (populations[other_subregion][timestep][stage_index] *
+            (populations[sex_index][other_subregion][timestep][stage_index] *
              migration[this_stage_name][other_subregion][this_subregion])
             for other_subregion in subregions)
 
-    # populations[subregion][timestep][stage_index]
-    populations = collections.defaultdict(lambda: collections.defaultdict(list))
+    # populations[sex_index][subregion][timestep][stage_index]
+    populations = [collections.defaultdict(lambda: collections.defaultdict(list)) for sex in sexes]
     for timestep in range(0, n_timesteps + 1):
         spawners = 0
 
-        for subregion, subregion_params in per_subregion_params.items():
-            try:
-                larval_dispersal = subregion_params['LarvalDispersal']
-            except KeyError:
-                # UG specifies that larvae disperse equally across all
-                # subregions unless the user specifies a different proportion.
-                larval_dispersal = 1. / len(subregions)
-            larval_dispersal_per_sex = larval_dispersal / n_sexes
+        for sex_index in sexes:
+            for subregion, subregion_params in per_subregion_params.items():
+                try:
+                    larval_dispersal = subregion_params['LarvalDispersal']
+                except KeyError:
+                    # UG specifies that larvae disperse equally across all
+                    # subregions unless the user specifies a different proportion.
+                    larval_dispersal = 1. / len(subregions)
+                larval_dispersal_per_sex = larval_dispersal / n_sexes
 
-            for stage_index, (stage_name, stage) in enumerate(subregion_params['stages'].items()):
+                for stage_index, (stage_name, stage) in enumerate(subregion_params['stages'][sex_index].items()):
 
-                if model_type == 'age':
-                    if stage_index == 0:
-                        population = total_recruits[timestep] * larval_dispersal_per_sex
-
-                    elif stage_index < (len(stages) -1):
-                        # disallow migration in the initial timestep.
-                        if stage_name in migration and timestep > 0:
-                            population = population_after_migration(subregion, stage_name, timestep-1, stage_index-1)
-
-                        else:
-                            # Don't allow the population index to go below 0.
-                            # If we're setting the initial condition, this will be:
-                            #    populations[subregion][0][stage_index-1]
-                            #
-                            # Otherwise, this will be
-                            #    populations[subregion][timestep-1][stage_index-1]
-                            population = populations[subregion][max(0, timestep-1)][stage_index-1]
-                        population *= survival[subregion][stage_index-1]
-
-                    else:
-                        survival_from_previous_stage = survival[subregion][stage_index-1]
-                        survival_from_final_stage = survival[subregion][stage_index]
-
-                        # Initial conditions are a bit special for the final stage of a subregion.
-                        # Migration is disallowed for this timestep.
-                        if timestep == 0:
-                            population = (
-                                (populations[subregion][0][stage_index-1] * survival_from_previous_stage) /
-                                (1 - survival_from_final_stage))
-
-                        # Migration can only happen if it's allowed for this stage
-                        # and we're not at timestep 0.
-                        elif stage_name in migration and timestep > 0:
-                            prev_stage_population = population_after_migration(
-                                subregion, stage_name, timestep-1, stage_index-1) * survival_from_previous_stage
-
-                            final_stage_population = population_after_migration(
-                                subregion, stage_name, timestep-1, stage_index)* survival_from_final_stage
-
-                            population = prev_stage_population + final_stage_population
-
-                        # No migration, we're not at timestep 0 and we're at the final stage.
-                        else:
-                            population = (
-                                (populations[subregion][timestep-1][stage_index-1] * survival_from_previous_stage) +
-                                (populations[subregion][timestep-1][stage_index] * survival_from_final_stage))
-
-                # Stage-base populations have a completely different model structure.
-                elif model_type == 'stage':
-                    if timestep == 0:
+                    if model_type == 'age':
                         if stage_index == 0:
                             population = total_recruits[timestep] * larval_dispersal_per_sex
-                        else:
-                            population = 1
-                    else:
-                        # P_asx in the User's Guide.  The probability of
-                        # surviving from natural and fishing mortality and
-                        # *staying* in the same stage for this sex and subregion.
-                        stage_survival = survival[subregion][stage_index]
-                        probability_of_staying_in_same_stage = (
-                            stage_survival * (
-                                (1-stage_survival**(stage['Duration']-1)) /
-                                (1-stage_survival**(stage['Duration']))))
 
-                        if stage_index == 0:
-                            if stage_name in migration:
-                                population = ((
-                                    population_after_migration(
-                                        subregion, stage_name, timestep-1, stage_index) *
-                                    probability_of_staying_in_same_stage) + (
-                                        total_recruits[timestep]))
+                        elif stage_index < (len(stages) - 1):
+                            # disallow migration in the initial timestep.
+                            if stage_name in migration and timestep > 0:
+                                population = population_after_migration(subregion, stage_name, timestep-1, stage_index-1, sex_index)
+
+                            else:
+                                # Don't allow the population index to go below 0.
+                                # If we're setting the initial condition, this will be:
+                                #    populations[sex_index][subregion][0][stage_index-1]
+                                #
+                                # Otherwise, this will be
+                                #    populations[sex_index][subregion][timestep-1][stage_index-1]
+                                population = populations[sex_index][subregion][max(0, timestep-1)][stage_index-1]
+                            population *= survival[sex_index][subregion][stage_index-1]
+
+                        else:
+                            survival_from_previous_stage = survival[sex_index][subregion][stage_index-1]
+                            survival_from_final_stage = survival[sex_index][subregion][stage_index]
+
+                            # Initial conditions are a bit special for the final stage of a subregion.
+                            # Migration is disallowed for this timestep.
+                            if timestep == 0:
+                                population = (
+                                    (populations[sex_index][subregion][0][stage_index-1] * survival_from_previous_stage) /
+                                    (1 - survival_from_final_stage))
+
+                            # Migration can only happen if it's allowed for this stage
+                            # and we're not at timestep 0.
+                            elif stage_name in migration and timestep > 0:
+                                prev_stage_population = population_after_migration(
+                                    subregion, stage_name, timestep-1, stage_index-1, sex_index) * survival_from_previous_stageA
+
+                                final_stage_population = population_after_migration(
+                                    subregion, stage_name, timestep-1, stage_index, sex_index)* survival_from_final_stage
+
+                                population = prev_stage_population + final_stage_population
+
+                            # No migration, we're not at timestep 0 and we're at the final stage.
                             else:
                                 population = (
-                                    populations[subregion][timestep-1][stage_index] *
-                                    probability_of_staying_in_same_stage +
-                                    total_recruits[timestep])
+                                    (populations[sex_index][subregion][timestep-1][stage_index-1] * survival_from_previous_stage) +
+                                    (populations[sex_index][subregion][timestep-1][stage_index] * survival_from_final_stage))
+
+                    # Stage-base populations have a completely different model structure.
+                    elif model_type == 'stage':
+                        if timestep == 0:
+                            if stage_index == 0:
+                                population = total_recruits[timestep] * larval_dispersal_per_sex
+                            else:
+                                population = 1
                         else:
-                            # G_asx in the User's Guide.  The probability of
+                            # P_asx in the User's Guide.  The probability of
                             # surviving from natural and fishing mortality and
-                            # *growing* into the next stage for each sex and
-                            # subregion.
-                            probability_of_growing_to_next_stage = (
-                                (stage_survival**stage['Duration'] * (1-stage_survival)) /
-                                (1-stage_survival**stage['Duration']))
+                            # *staying* in the same stage for this sex and subregion.
+                            stage_survival = survival[sex_index][subregion][stage_index]
+                            probability_of_staying_in_same_stage = (
+                                stage_survival * (
+                                    (1-stage_survival**(stage['Duration']-1)) /
+                                    (1-stage_survival**(stage['Duration']))))
 
-                            if stage_name in migration:
-                                population = (
-                                    (population_after_migration(
-                                        subregion, stage_name, timestep-1, stage_index-1) *
-                                     probability_of_growing_to_next_stage) +
-                                    (population_after_migration(
-                                        subregion, stage_name, timestep-1, stage_index) *
-                                     probability_of_staying_in_same_stage))
+                            if stage_index == 0:
+                                if stage_name in migration:
+                                    population = ((
+                                        population_after_migration(
+                                            subregion, stage_name, timestep-1, stage_index, sex_index) *
+                                        probability_of_staying_in_same_stage) + (
+                                            total_recruits[timestep]))
+                                else:
+                                    population = (
+                                        populations[sex_index][subregion][timestep-1][stage_index] *
+                                        probability_of_staying_in_same_stage +
+                                        total_recruits[timestep])
                             else:
-                                population = (
-                                    (populations[subregion][timestep-1][stage_index-1] *
-                                     probability_of_growing_to_next_stage) +
-                                    (populations[subregion][timestep-1][stage_index] *
-                                     probability_of_staying_in_same_stage))
-                else:
-                    raise AssertionError('Invalid model type')
+                                # G_asx in the User's Guide.  The probability of
+                                # surviving from natural and fishing mortality and
+                                # *growing* into the next stage for each sex and
+                                # subregion.
+                                probability_of_growing_to_next_stage = (
+                                    (stage_survival**stage['Duration'] * (1-stage_survival)) /
+                                    (1-stage_survival**stage['Duration']))
 
-                # Can't have fewer than 0 individuals
-                population = max(0, population)
+                                if stage_name in migration:
+                                    population = (
+                                        (population_after_migration(
+                                            subregion, stage_name, timestep-1, stage_index-1, sex_index) *
+                                         probability_of_growing_to_next_stage) +
+                                        (population_after_migration(
+                                            subregion, stage_name, timestep-1, stage_index, sex_index) *
+                                         probability_of_staying_in_same_stage))
+                                else:
+                                    population = (
+                                        (populations[sex_index][subregion][timestep-1][stage_index-1] *
+                                         probability_of_growing_to_next_stage) +
+                                        (populations[sex_index][subregion][timestep-1][stage_index] *
+                                         probability_of_staying_in_same_stage))
+                    else:
+                        raise AssertionError('Invalid model type')
 
-                populations[subregion][timestep].append(population)
+                    # Can't have fewer than 0 individuals
+                    population = max(0, population)
 
-                # This is where we handle spawners by weight (if requested)
-                stage_spawners = population * stage['Maturity']
-                if args['spawn_units'].lower() == 'weight':
-                    stage_spawners*= stage['Weight']
-                spawners += stage_spawners
+                    populations[sex_index][subregion][timestep].append(population)
+
+                    # This is where we handle spawners by weight (if requested)
+                    stage_spawners = population * stage['Maturity']
+                    if args['spawn_units'].lower() == 'weight':
+                        stage_spawners*= stage['Weight']
+                    spawners += stage_spawners
 
         total_spawners.append(spawners)
         recruitment_args = {
@@ -383,10 +397,10 @@ def model(args, recruitment):
         total_recruits.append(max(0, recruitment(recruitment_args)))
 
     # For now, just produce a dataframe for a single subregion for all timesteps.
-    # This dataframe is for populations from subregion 1 only.
-    out_df = pandas.DataFrame.from_dict(populations['1'], orient='index')
+    # This dataframe is for populations from subregion 1 (sex 0) only.
+    out_df = pandas.DataFrame.from_dict(populations[0]['1'], orient='index')
     out_df.columns = stages  # reset stage names from indexes
-    LOGGER.info('POPULATION SUBREGION 1')
+    LOGGER.info('POPULATION SUBREGION 1 SEX 0')
     print(out_df)
 
     # This harvest dataframe is the harvest calculated for all subregions.
@@ -400,17 +414,18 @@ def model(args, recruitment):
         harvest[subregion] = []
         for timestep in range(0, n_timesteps+1):
             harvest_population = 0
-            for stage_index, stage_name in enumerate(stages):
-                # vulnerability is the 'vulnerability' row in the spreadsheet,
-                # represented in populations input as VulnFishing
-                vulnerability = per_subregion_params[subregion]['stages'][stage_name]['VulnFishing']
-                weight = per_subregion_params[subregion]['stages'][stage_name]['Weight']
+            for sex_index in sexes:
+                for stage_index, stage_name in enumerate(stages):
+                    # vulnerability is the 'vulnerability' row in the spreadsheet,
+                    # represented in populations input as VulnFishing
+                    vulnerability = per_subregion_params[subregion]['stages'][sex_index][stage_name]['VulnFishing']
+                    weight = per_subregion_params[subregion]['stages'][sex_index][stage_name]['Weight']
 
-                harvest_population += (
-                    populations[subregion][timestep][stage_index] *
-                    exploitation *
-                    vulnerability *
-                    weight)
+                    harvest_population += (
+                        populations[sex_index][subregion][timestep][stage_index] *
+                        exploitation *
+                        vulnerability *
+                        weight)
 
             harvest[subregion].append(harvest_population)
     harvest_df = pandas.DataFrame.from_dict(harvest, orient='columns')
@@ -466,6 +481,6 @@ def model(args, recruitment):
 
 if __name__ == '__main__':
     #lobster_jess()
-    lobster()
+    #lobster()
     #shrimp()
-    #dungeness_crab()
+    dungeness_crab()
