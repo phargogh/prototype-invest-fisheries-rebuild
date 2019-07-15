@@ -89,13 +89,13 @@ def shrimp():
     model(args, recruitment=fixed)
 
 
-def crab():
+def dungeness_crab():
     # Ricker recruitment
     # spawners are individuals
     # age-based population model
     # no migration
     # Sex-specific population
-    LOGGER.info('Crab')
+    LOGGER.info('Dungeness Crab')
     paramset = datastack.extract_parameter_set(
         '../../invest/data/invest-sample-data/dungeness_crab_hood_canal.invs.json')
     args = paramset.args.copy()
@@ -468,4 +468,4 @@ if __name__ == '__main__':
     #lobster_jess()
     lobster()
     #shrimp()
-    #crab()
+    #dungeness_crab()
