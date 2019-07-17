@@ -26,6 +26,19 @@ def beverton_holt_2(args):
     spawners = args['spawners']
     return float(alpha * spawners) / (beta + spawners)
 
+def fecundity(args):
+    per_subregion_params = args['per_subregion_params']
+    populations = args['populations']
+    recruits = 0
+    for subregion, subregion_params in per_subregion_params.items():
+        for sex_index in sexes:
+            for stage_index, (stage_name, stage) in enumerate(subregion_params['stages'][sex_index].items()):
+                recruits += (
+                    populations[sex_index][subregion][timestep-1][stage_index-1] *
+                    stage['Maturity'] * stage['Fecundity'])
+
+    return recruits
+
 
 def ricker(args):
     alpha = args['alpha']
@@ -423,6 +436,8 @@ def model(args, recruitment):
             'beta': beta,
             'spawners': spawners,
             'n_recruits': n_recruits,
+            'per_subregion_params': per_subregion_params,
+            'populations': populations,
         }
         total_recruits.append(max(0, recruitment(recruitment_args)))
 
