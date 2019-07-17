@@ -94,7 +94,26 @@ def shrimp():
         '../../invest/data/invest-sample-data/white_shrimp_galveston_bay.invs.json')
     args = paramset.args.copy()
 
-    model(args, recruitment=fixed)
+    spawners, harvest = model(args, recruitment=fixed)
+
+    check_expected(spawners, 2.16e11)  # fixed recruitment
+    check_expected(harvest, 3096000)
+
+
+def blue_crab():
+    # Ricker recruitment
+    # spawners are individuals
+    # age-based population model
+    # non-sex-specific population
+    # harvest by individuals
+    LOGGER.info('Blue Crab')
+    paramset = datastack.extract_parameter_set(
+        '../../invest/data/invest-sample-data/blue_crab_galveston_bay.invs.json')
+    args = paramset.args.copy()
+
+    spawners, harvest = model(args, recruitment=ricker)
+    check_expected(spawners, 42644460)
+    check_expected(harvest, 24798419)
 
 
 def dungeness_crab():
@@ -517,5 +536,6 @@ def model(args, recruitment):
 if __name__ == '__main__':
     #lobster_jess()
     lobster()
-    #shrimp()
-    #dungeness_crab()
+    shrimp()
+    dungeness_crab()
+    blue_crab()
