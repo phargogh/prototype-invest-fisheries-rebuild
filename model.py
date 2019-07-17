@@ -36,6 +36,10 @@ def ricker(args):
 def fixed(args):
     return args['n_recruits']
 
+def check_expected(actual, expected):
+    assert round(expected) == expected, '%s != %s' % (actual, expected)
+
+
 def lobster():
     paramset = datastack.extract_parameter_set(
         '../../invest/data/invest-sample-data/spiny_lobster_belize.invs.json')
@@ -43,7 +47,11 @@ def lobster():
     args['total_init_recruits'] = 4686959  # to match spreadsheet
 
     LOGGER.info('Spiny Lobster - Sample Data')
-    model(args, recruitment=beverton_holt_2)
+    spawners, harvest = model(args, recruitment=beverton_holt_2)
+
+    check_expected(spawners, 2847870)
+    check_expected(harvest, 963451)
+
 
 def lobster_jess():
     paramset = datastack.extract_parameter_set(
@@ -100,7 +108,9 @@ def dungeness_crab():
         '../../invest/data/invest-sample-data/dungeness_crab_hood_canal.invs.json')
     args = paramset.args.copy()
 
-    model(args, recruitment=ricker)
+    spawners, harvest = model(args, recruitment=ricker)
+    check_expected(spawners, 4051538)
+    check_expected(harvest, 526987)
 
 
 def model(args, recruitment):
@@ -229,8 +239,9 @@ def model(args, recruitment):
     if 'migration_dir' in args and args['migration_dir'] not in (None, ''):
         for csv_filename in glob.glob(os.path.join(args['migration_dir'], '*.csv')):
             stage_name = os.path.splitext(os.path.basename(csv_filename))[0].split('_')[-1]
+            temp_df = pandas.read_csv(csv_filename, index_col=0)
             temp_dict = pandas.DataFrame.to_dict(
-                pandas.read_csv(csv_filename, index_col=0), orient='dict')
+                temp_df, orient='dict')
 
             # Pandas' to_dict() reads in the sink subregions as integers if they
             # are integers, so we need to make sure that they are all strings so we
@@ -473,14 +484,33 @@ def model(args, recruitment):
     total_harvest_df = pandas.DataFrame({'Total harvest': total_harvest_series})
     df_spawners_recruits = df_spawners_recruits.join(total_harvest_df)
     # TODO: add in Total Value column
-    # TODO: add in equilibrium checking column.
+
+    # Should this always be based on value?  Or can this be based on weight?
+    equilibrated_series = [None] * 10
+    is_equilibrated = [None] * 10
+    for timestep in range(10, n_timesteps+1):
+        equilibration = (
+            total_harvest_series[timestep-9:timestep+1].mean() /
+            total_harvest_series[timestep])
+        equilibrated_series.append(equilibration)
+        if numpy.isclose(equilibration, 1.0, rtol=1e-4):
+            is_equilibrated.append('Y')
+        else:
+            is_equilibrated.append('N')
+    equilibrated_df = pandas.DataFrame({
+        'Equilibration checker': equilibrated_series,
+        'Is equilibrated': is_equilibrated,
+    })
+    df_spawners_recruits = df_spawners_recruits.join(equilibrated_df)
+
     print(df_spawners_recruits)
 
+    return tuple(df_spawners_recruits[['Total spawners', 'Total harvest']].iloc[[-1]].values[0])
 
 
 
 if __name__ == '__main__':
     #lobster_jess()
-    #lobster()
+    lobster()
     #shrimp()
-    dungeness_crab()
+    #dungeness_crab()
