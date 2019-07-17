@@ -480,10 +480,15 @@ def model(args, recruitment):
         'Total recruits': total_recruits[:-1]})
     df_spawners_recruits = df_spawners_recruits[['Timestep', 'Total spawners', 'Total recruits']]
     total_harvest_series = harvest_df.sum(axis=1)
-    total_harvest_series.rename('Total harvest')
     total_harvest_df = pandas.DataFrame({'Total harvest': total_harvest_series})
     df_spawners_recruits = df_spawners_recruits.join(total_harvest_df)
-    # TODO: add in Total Value column
+
+    # If we're doing valuation, add in a total harvest value column.
+    if args['val_cont']:
+        harvest_value_df = pandas.DataFrame({
+            'Harvest value': total_harvest_series * args['unit_price'] * args['frac_post_process']
+        })
+        df_spawners_recruits = df_spawners_recruits.join(harvest_value_df)
 
     # Should this always be based on value?  Or can this be based on weight?
     equilibrated_series = [None] * 10
